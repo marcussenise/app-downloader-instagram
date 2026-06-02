@@ -59,6 +59,17 @@ def status():
     )
 
 
+@app.route("/log")
+def view_log():
+    """Mostra as últimas 80 linhas do debug.log no navegador."""
+    try:
+        lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+        tail = "\n".join(lines[-80:])
+    except Exception as e:
+        tail = f"Erro ao ler log: {e}"
+    return f"<pre style='font-size:12px;white-space:pre-wrap;word-break:break-all'>{tail}</pre>"
+
+
 @app.route("/download", methods=["POST"])
 def download():
     url = (request.json or {}).get("url", "").strip()
@@ -108,9 +119,14 @@ def download():
     # Extrai metadados do post
     entries = info.get("entries") or []
     first = entries[0] if entries else info
+    log.info("RAW uploader=%r  uploader_id=%r  uploader_url=%r",
+             info.get("uploader"), info.get("uploader_id"), info.get("uploader_url"))
+    if first is not info:
+        log.info("RAW(first) uploader=%r  uploader_id=%r  uploader_url=%r",
+                 first.get("uploader"), first.get("uploader_id"), first.get("uploader_url"))
     uploader = _instagram_username(info, first)
     description = (info.get("description") or first.get("description") or "")
-    log.info("uploader=%s  description=%s chars", uploader, len(description))
+    log.info("uploader=%r  description=%d chars", uploader, len(description))
 
     _media_scan(novos)
 
