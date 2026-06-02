@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import subprocess
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 import yt_dlp
@@ -111,10 +112,25 @@ def download():
     description = (info.get("description") or first.get("description") or "")
     log.info("uploader=%s  description=%s chars", uploader, len(description))
 
+    _media_scan(novos)
+
     count = len(novos)
     tipo = "1 vídeo" if count == 1 else f"{count} arquivos"
     return jsonify(ok=True, tipo=tipo, pasta=str(SAVE_DIR), arquivos=novos,
                    uploader=uploader, description=description)
+
+
+def _media_scan(filenames):
+    """Avisa o Android sobre arquivos novos para aparecerem na galeria."""
+    for name in filenames:
+        path = str(SAVE_DIR / name)
+        try:
+            subprocess.run(["termux-media-scan", path], timeout=10, check=False)
+            log.info("termux-media-scan: %s", path)
+        except FileNotFoundError:
+            log.debug("termux-media-scan não disponível (sem termux-api)")
+        except Exception as e:
+            log.warning("termux-media-scan falhou: %s", e)
 
 
 def _instagram_username(info, first):
