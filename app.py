@@ -92,9 +92,18 @@ def download():
             error=f"yt-dlp terminou sem criar arquivos. Veja debug.log para detalhes. Pasta: {SAVE_DIR}"
         ), 500
 
+    # Extrai metadados do post
+    entries = info.get("entries") or []
+    first = entries[0] if entries else info
+    uploader = (info.get("uploader") or info.get("uploader_id")
+                or first.get("uploader") or first.get("uploader_id") or "")
+    description = (info.get("description") or first.get("description") or "")
+    log.info("uploader=%s  description=%s chars", uploader, len(description))
+
     count = len(novos)
     tipo = "1 vídeo" if count == 1 else f"{count} arquivos"
-    return jsonify(ok=True, tipo=tipo, pasta=str(SAVE_DIR), arquivos=novos)
+    return jsonify(ok=True, tipo=tipo, pasta=str(SAVE_DIR), arquivos=novos,
+                   uploader=uploader, description=description)
 
 
 class _YtdlpLogger:

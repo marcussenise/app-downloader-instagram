@@ -124,6 +124,60 @@
       color: #444;
       margin-top: 8px;
     }
+
+    .meta-block {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .meta-row {
+      background: #252525;
+      border: 1.5px solid #333;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .meta-label {
+      font-size: 0.72rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .meta-value {
+      font-size: 0.92rem;
+      color: #f0f0f0;
+      word-break: break-word;
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .copy-btn {
+      align-self: flex-end;
+      margin-top: 4px;
+      padding: 6px 14px;
+      background: #333;
+      border: none;
+      border-radius: 8px;
+      color: #ccc;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: auto;
+      transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .copy-btn:active { opacity: 0.85; }
+    .copy-btn.copied { background: #1a5c35; color: #4cde89; }
   </style>
 </head>
 <body>
@@ -146,11 +200,46 @@
 
     <div class="msg ok" id="msg-ok"></div>
     <div class="msg err" id="msg-err"></div>
+
+    <div class="meta-block" id="meta-block">
+      <div class="meta-row" id="row-uploader">
+        <span class="meta-label">Conta</span>
+        <span class="meta-value" id="meta-uploader"></span>
+        <button class="copy-btn" onclick="copiar('meta-uploader', this)">Copiar</button>
+      </div>
+      <div class="meta-row" id="row-desc">
+        <span class="meta-label">Descrição</span>
+        <span class="meta-value" id="meta-desc"></span>
+        <button class="copy-btn" onclick="copiar('meta-desc', this)">Copiar</button>
+      </div>
+    </div>
   </div>
 
   <p class="hint">Os arquivos são salvos em Downloads/Instagram</p>
 
   <script>
+    function copiar(elementId, btn) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "Copiado!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copiar"; btn.classList.remove("copied"); }, 2000);
+      });
+    }
+
+    function mostrarMeta(uploader, description) {
+      const block = document.getElementById("meta-block");
+      const rowUp = document.getElementById("row-uploader");
+      const rowDesc = document.getElementById("row-desc");
+
+      document.getElementById("meta-uploader").textContent = uploader || "";
+      document.getElementById("meta-desc").textContent = description || "";
+
+      rowUp.style.display = uploader ? "flex" : "none";
+      rowDesc.style.display = description ? "flex" : "none";
+      block.style.display = (uploader || description) ? "flex" : "none";
+    }
+
     async function baixar() {
       const url = document.getElementById("url").value.trim();
       const btn = document.getElementById("btn");
@@ -161,6 +250,7 @@
 
       msgOk.style.display = "none";
       msgErr.style.display = "none";
+      document.getElementById("meta-block").style.display = "none";
 
       if (!url) {
         msgErr.textContent = "Cole um link do Instagram primeiro.";
@@ -184,6 +274,7 @@
           const lista = data.arquivos ? data.arquivos.map(f => `• ${f}`).join("<br>") : "";
           msgOk.innerHTML = `✓ ${data.tipo} salvo em:<br><b>${data.pasta}</b>${lista ? "<br><small>" + lista + "</small>" : ""}`;
           msgOk.style.display = "block";
+          mostrarMeta(data.uploader || "", data.description || "");
           document.getElementById("url").value = "";
         } else {
           msgErr.innerHTML = (data.error || "Erro desconhecido.") + `<br><small>Veja <b>debug.log</b> para detalhes.</small>`;
