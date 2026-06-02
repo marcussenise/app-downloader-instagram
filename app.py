@@ -95,8 +95,8 @@ def download():
     # Extrai metadados do post
     entries = info.get("entries") or []
     first = entries[0] if entries else info
-    uploader = (info.get("uploader") or info.get("uploader_id")
-                or first.get("uploader") or first.get("uploader_id") or "")
+    raw_id = (info.get("uploader_id") or first.get("uploader_id") or "").lstrip("@")
+    uploader = f"@{raw_id}" if raw_id else ""
     description = (info.get("description") or first.get("description") or "")
     log.info("uploader=%s  description=%s chars", uploader, len(description))
 
