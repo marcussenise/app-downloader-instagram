@@ -181,11 +181,12 @@
         const data = await res.json();
 
         if (data.ok) {
-          msgOk.innerHTML = `✓ Download concluído!<br><small>${data.tipo} salvo em <b>${data.pasta}</b></small>`;
+          const lista = data.arquivos ? data.arquivos.map(f => `• ${f}`).join("<br>") : "";
+          msgOk.innerHTML = `✓ ${data.tipo} salvo em:<br><b>${data.pasta}</b>${lista ? "<br><small>" + lista + "</small>" : ""}`;
           msgOk.style.display = "block";
           document.getElementById("url").value = "";
         } else {
-          msgErr.textContent = data.error || "Erro desconhecido.";
+          msgErr.innerHTML = (data.error || "Erro desconhecido.") + `<br><small>Veja <b>debug.log</b> para detalhes.</small>`;
           msgErr.style.display = "block";
         }
       } catch (e) {
