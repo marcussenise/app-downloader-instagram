@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Instagram Downloader</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100dvh;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+    }
+
+    .logo {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+      border-radius: 14px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo svg { width: 30px; height: 30px; fill: white; }
+
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 32px;
+      color: #fff;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #1a1a1a;
+      border-radius: 18px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 14px;
+      background: #252525;
+      border: 1.5px solid #333;
+      border-radius: 12px;
+      color: #f0f0f0;
+      font-size: 0.95rem;
+      resize: none;
+      height: 80px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: #cc2366; }
+    textarea::placeholder { color: #666; }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(90deg, #e6683c, #cc2366, #bc1888);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    button:active { opacity: 0.85; }
+    button:disabled { opacity: 0.5; cursor: default; }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .msg {
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      display: none;
+    }
+
+    .msg.ok {
+      background: #0d2b1a;
+      border: 1px solid #1a5c35;
+      color: #4cde89;
+    }
+
+    .msg.err {
+      background: #2b0d0d;
+      border: 1px solid #5c1a1a;
+      color: #de4c4c;
+    }
+
+    .hint {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #444;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 1.366.062 2.633.334 3.608 1.31.975.975 1.247 2.242 1.31 3.608.058 1.265.07 1.645.07 4.849s-.012 3.584-.07 4.85c-.063 1.366-.335 2.633-1.31 3.608-.975.975-2.242 1.247-3.608 1.31-1.266.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-1.366-.063-2.633-.335-3.608-1.31-.975-.975-1.247-2.242-1.31-3.608C2.175 15.584 2.163 15.204 2.163 12s.012-3.584.07-4.85c.063-1.366.335-2.633 1.31-3.608.975-.975 2.242-1.247 3.608-1.31C8.416 2.175 8.796 2.163 12 2.163M12 0C8.741 0 8.333.014 7.053.072 5.197.157 3.355.673 2.014 2.014.673 3.355.157 5.197.072 7.053.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.085 1.856.601 3.698 1.942 5.038 1.341 1.341 3.183 1.857 5.038 1.942C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 1.856-.085 3.698-.601 5.038-1.942 1.341-1.34 1.857-3.182 1.942-5.038.058-1.28.072-1.689.072-4.948 0-3.259-.014-3.667-.072-4.947-.085-1.856-.601-3.698-1.942-5.038C20.646.673 18.804.157 16.948.072 15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324A6.162 6.162 0 0 0 12 5.838zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
+    </svg>
+  </div>
+
+  <h1>Instagram Downloader</h1>
+
+  <div class="card">
+    <textarea id="url" placeholder="Cole o link do post, reel ou carrossel..."></textarea>
+
+    <button id="btn" onclick="baixar()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-text">Baixar</span>
+    </button>
+
+    <div class="msg ok" id="msg-ok"></div>
+    <div class="msg err" id="msg-err"></div>
+  </div>
+
+  <p class="hint">Os arquivos são salvos em Downloads/Instagram</p>
+
+  <script>
+    async function baixar() {
+      const url = document.getElementById("url").value.trim();
+      const btn = document.getElementById("btn");
+      const spinner = document.getElementById("spinner");
+      const btnText = document.getElementById("btn-text");
+      const msgOk = document.getElementById("msg-ok");
+      const msgErr = document.getElementById("msg-err");
+
+      msgOk.style.display = "none";
+      msgErr.style.display = "none";
+
+      if (!url) {
+        msgErr.textContent = "Cole um link do Instagram primeiro.";
+        msgErr.style.display = "block";
+        return;
+      }
+
+      btn.disabled = true;
+      spinner.style.display = "block";
+      btnText.textContent = "Baixando...";
+
+      try {
+        const res = await fetch("/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          msgOk.innerHTML = `✓ Download concluído!<br><small>${data.tipo} salvo em <b>${data.pasta}</b></small>`;
+          msgOk.style.display = "block";
+          document.getElementById("url").value = "";
+        } else {
+          msgErr.textContent = data.error || "Erro desconhecido.";
+          msgErr.style.display = "block";
+        }
+      } catch (e) {
+        msgErr.textContent = "Não foi possível conectar. O app está rodando?";
+        msgErr.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        spinner.style.display = "none";
+        btnText.textContent = "Baixar";
+      }
+    }
+
+    // Permite colar e enviar com Enter no textarea
+    document.getElementById("url").addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); baixar(); }
+    });
+  </script>
+
+</body>
+</html>
