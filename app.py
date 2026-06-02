@@ -21,9 +21,15 @@ log = logging.getLogger(__name__)
 # --- app ----------------------------------------------------------------------
 app = Flask(__name__)
 
-_termux_storage = Path("/storage/emulated/0/Downloads/Instagram")
+_android_root = Path("/storage/emulated/0")
 _termux_fallback = Path.home() / "storage" / "downloads" / "Instagram"
-SAVE_DIR = _termux_storage if Path("/storage/emulated/0").exists() else _termux_fallback
+if _android_root.exists():
+    # Tenta Download (singular, padrão AOSP) e Downloads (plural, alguns OEMs)
+    _dl = _android_root / "Download" / "Instagram"
+    _dls = _android_root / "Downloads" / "Instagram"
+    SAVE_DIR = _dl if (_dl.exists() or not _dls.exists()) else _dls
+else:
+    SAVE_DIR = _termux_fallback
 log.info("SAVE_DIR = %s  (existe: %s)", SAVE_DIR, SAVE_DIR.exists())
 
 try:
@@ -78,6 +84,8 @@ def download():
     if not url or "instagram.com" not in url:
         return jsonify(error="Cole um link válido do Instagram."), 400
 
+    antes = set(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else set()
+
     ydl_opts = {
         "outtmpl": str(SAVE_DIR / "%(autonumber)s_%(id)s.%(ext)s"),
         "quiet": False,        # mostra tudo no terminal/log
@@ -102,13 +110,30 @@ def download():
         log.exception("Erro inesperado")
         return jsonify(error=f"Erro inesperado: {e}"), 500
 
-    # Pega os arquivos a partir do requested_downloads (funciona mesmo se já existia)
+    # 1ª tentativa: requested_downloads (funciona mesmo se já existia)
     requested = info.get("requested_downloads") or []
+    log.info("requested_downloads: %s",
+             [{k: v for k, v in d.items() if k in ("filepath", "_filename", "filename")}
+              for d in requested])
     novos = [Path(d["filepath"]).name for d in requested if d.get("filepath")]
-    log.info("Arquivos (requested_downloads): %s", novos)
+
+    # 2ª tentativa: comparação disco (cobre merge onde filepath vem vazio)
+    if not novos:
+        depois = set(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else set()
+        novos = [f.name for f in (depois - antes) if not f.name.endswith(".part")]
+        log.info("Arquivos via disco: %s", novos)
+
+    # 3ª tentativa: arquivo "already downloaded" — ainda conta como sucesso
+    if not novos:
+        todos = sorted(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else []
+        mp4s = [f.name for f in todos if f.suffix == ".mp4"]
+        post_id = (info.get("id") or "")
+        novos = [n for n in mp4s if post_id and post_id in n]
+        if novos:
+            log.info("Arquivo já existente encontrado pelo id: %s", novos)
 
     if not novos:
-        log.warning("requested_downloads vazio em %s", SAVE_DIR)
+        log.warning("Nenhum arquivo encontrado em %s", SAVE_DIR)
         return jsonify(
             error=f"yt-dlp terminou sem criar arquivos. Veja debug.log para detalhes. Pasta: {SAVE_DIR}"
         ), 500
@@ -137,13 +162,25 @@ def _media_scan(filenames):
     """Avisa o Android sobre arquivos novos para aparecerem na galeria."""
     for name in filenames:
         path = str(SAVE_DIR / name)
+        # Tenta termux-media-scan (requer termux-api)
         try:
             subprocess.run(["termux-media-scan", path], timeout=10, check=False)
-            log.info("termux-media-scan: %s", path)
+            log.info("termux-media-scan OK: %s", path)
+            continue
         except FileNotFoundError:
-            log.debug("termux-media-scan não disponível (sem termux-api)")
+            pass
         except Exception as e:
             log.warning("termux-media-scan falhou: %s", e)
+        # Fallback: am broadcast (não requer termux-api)
+        try:
+            uri = "file://" + path
+            subprocess.run(
+                ["am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", uri],
+                timeout=10, check=False
+            )
+            log.info("am broadcast media scan OK: %s", path)
+        except Exception as e:
+            log.warning("am broadcast falhou: %s", e)
 
 
 def _instagram_username(info, first):
