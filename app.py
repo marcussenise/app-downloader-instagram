@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 import yt_dlp
@@ -37,12 +38,21 @@ def index():
 @app.route("/status")
 def status():
     """Rota de diagnóstico — abra /status no navegador para ver o estado."""
+    home = Path.home()
+    storage_link = home / "storage"
+    downloads_link = home / "storage" / "downloads"
     files = sorted(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else []
     return jsonify(
+        home=str(home),
+        storage_exists=storage_link.exists(),
+        storage_is_symlink=storage_link.is_symlink(),
+        downloads_exists=downloads_link.exists(),
         save_dir=str(SAVE_DIR),
         save_dir_exists=SAVE_DIR.exists(),
+        save_dir_writable=os.access(SAVE_DIR, os.W_OK) if SAVE_DIR.exists() else False,
         files_in_dir=[f.name for f in files],
         log_file=str(LOG_FILE),
+        cwd=os.getcwd(),
     )
 
 
@@ -95,8 +105,7 @@ def download():
     # Extrai metadados do post
     entries = info.get("entries") or []
     first = entries[0] if entries else info
-    raw_id = (info.get("uploader_id") or first.get("uploader_id") or "").lstrip("@")
-    uploader = f"@{raw_id}" if raw_id else ""
+    uploader = _instagram_username(info, first)
     description = (info.get("description") or first.get("description") or "")
     log.info("uploader=%s  description=%s chars", uploader, len(description))
 
@@ -104,6 +113,20 @@ def download():
     tipo = "1 vídeo" if count == 1 else f"{count} arquivos"
     return jsonify(ok=True, tipo=tipo, pasta=str(SAVE_DIR), arquivos=novos,
                    uploader=uploader, description=description)
+
+
+def _instagram_username(info, first):
+    """Extrai o @username do campo uploader_url; cai para uploader_id se não numérico."""
+    for src in (info, first):
+        url = src.get("uploader_url") or ""
+        m = re.search(r"instagram\.com/([A-Za-z0-9_.]+)/?", url)
+        if m:
+            return f"@{m.group(1)}"
+    for src in (info, first):
+        uid = (src.get("uploader_id") or "").lstrip("@")
+        if uid and not uid.isdigit():
+            return f"@{uid}"
+    return ""
 
 
 class _YtdlpLogger:
