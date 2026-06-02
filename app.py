@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 # --- app ----------------------------------------------------------------------
 app = Flask(__name__)
 
-_termux_storage = Path("/storage/emulated/0/Download/Instagram")
+_termux_storage = Path("/storage/emulated/0/Downloads/Instagram")
 _termux_fallback = Path.home() / "storage" / "downloads" / "Instagram"
 SAVE_DIR = _termux_storage if Path("/storage/emulated/0").exists() else _termux_fallback
 log.info("SAVE_DIR = %s  (existe: %s)", SAVE_DIR, SAVE_DIR.exists())
