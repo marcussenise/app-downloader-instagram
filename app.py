@@ -78,9 +78,6 @@ def download():
     if not url or "instagram.com" not in url:
         return jsonify(error="Cole um link válido do Instagram."), 400
 
-    # Arquivos presentes ANTES do download (para detectar o que foi criado)
-    antes = set(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else set()
-
     ydl_opts = {
         "outtmpl": str(SAVE_DIR / "%(autonumber)s_%(id)s.%(ext)s"),
         "quiet": False,        # mostra tudo no terminal/log
@@ -105,13 +102,13 @@ def download():
         log.exception("Erro inesperado")
         return jsonify(error=f"Erro inesperado: {e}"), 500
 
-    # Arquivos criados APÓS o download
-    depois = set(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else set()
-    novos = [f.name for f in (depois - antes) if not f.name.endswith(".part")]
-    log.info("Arquivos novos: %s", novos)
+    # Pega os arquivos a partir do requested_downloads (funciona mesmo se já existia)
+    requested = info.get("requested_downloads") or []
+    novos = [Path(d["filepath"]).name for d in requested if d.get("filepath")]
+    log.info("Arquivos (requested_downloads): %s", novos)
 
     if not novos:
-        log.warning("Nenhum arquivo novo encontrado em %s", SAVE_DIR)
+        log.warning("requested_downloads vazio em %s", SAVE_DIR)
         return jsonify(
             error=f"yt-dlp terminou sem criar arquivos. Veja debug.log para detalhes. Pasta: {SAVE_DIR}"
         ), 500
@@ -150,16 +147,32 @@ def _media_scan(filenames):
 
 
 def _instagram_username(info, first):
-    """Extrai o @username do campo uploader_url; cai para uploader_id se não numérico."""
+    """Extrai o @username tentando vários campos do yt-dlp."""
     for src in (info, first):
+        # uploader_url nem sempre existe, mas vale tentar
         url = src.get("uploader_url") or ""
         m = re.search(r"instagram\.com/([A-Za-z0-9_.]+)/?", url)
         if m:
+            log.debug("username via uploader_url: %s", m.group(1))
             return f"@{m.group(1)}"
+
+    # channel costuma ser o username no extractor do Instagram
     for src in (info, first):
-        uid = (src.get("uploader_id") or "").lstrip("@")
+        ch = (src.get("channel") or "").lstrip("@").strip()
+        if ch and not ch.isdigit():
+            log.debug("username via channel: %s", ch)
+            return f"@{ch}"
+
+    # uploader_id se não for numérico
+    for src in (info, first):
+        uid = (src.get("uploader_id") or "").lstrip("@").strip()
         if uid and not uid.isdigit():
+            log.debug("username via uploader_id: %s", uid)
             return f"@{uid}"
+
+    log.warning("username não encontrado. uploader=%r uploader_id=%r channel=%r uploader_url=%r",
+                info.get("uploader"), info.get("uploader_id"),
+                info.get("channel"), info.get("uploader_url"))
     return ""
 
 
