@@ -193,7 +193,8 @@
   <h1>Instagram Downloader</h1>
 
   <div class="card">
-    <textarea id="url" placeholder="Cole o link do post, reel ou carrossel..."></textarea>
+   <textarea id="url" placeholder="Cole o link do post, reel ou carrossel..."></textarea>
+    <button type="button" id="btn-colar">Colar Link</button>
 
     <button id="btn" onclick="baixar()">
       <div class="spinner" id="spinner"></div>
@@ -214,12 +215,38 @@
         <span class="meta-value" id="meta-desc"></span>
         <button class="copy-btn" onclick="copiar('meta-desc', this)">Copiar</button>
       </div>
+      <div class="meta-row" id="row-frase">
+        <span class="meta-label">Sugestão CTA</span>
+        <span class="meta-value" id="meta-frase"></span>
+        <button class="copy-btn" onclick="copiar('meta-frase', this)">Copiar</button>
+      </div>
     </div>
   </div>
 
   <p class="hint">Os arquivos são salvos em Downloads/Instagram</p>
 
   <script>
+    const frasesCTA = [
+      '🧭 Para mais dicas e curiosidades sobre arte, viagem e cultura: @explorai.com.br',
+      '🧭 Planeje, descubra, explore! Sua viagem fica completa no @explorai.com.br - Com um app em breve saindo do forno! Fique ligado nas novidades 🛫',
+    ];
+    const textarea = document.getElementById('url');
+    const botaoColar = document.getElementById('btn-colar');
+
+    botaoColar.addEventListener('click', async () => {
+    try {
+      // Solicita a permissão e lê o texto da área de transferência
+      const textoCopiado = await navigator.clipboard.readText();
+      
+      // Insere o texto dentro do textarea
+      textarea.value = textoCopiado;
+    } catch (erro) {
+      // Caso o usuário negue a permissão ou o navegador não suporte
+      alert('Não foi possível colar automaticamente. Por favor, use Ctrl+V ou clique com o botão direito.');
+      console.error('Erro ao ler a área de transferência: ', erro);
+    }
+  });
+
     function copiar(elementId, btn) {
       const text = document.getElementById(elementId).textContent;
       navigator.clipboard.writeText(text).then(() => {
@@ -229,16 +256,23 @@
       });
     }
 
+    function obterFraseAleatoria() {
+      return frasesCTA[Math.floor(Math.random() * frasesCTA.length)];
+    }
+
     function mostrarMeta(uploader, description) {
       const block = document.getElementById("meta-block");
       const rowUp = document.getElementById("row-uploader");
       const rowDesc = document.getElementById("row-desc");
+      const rowFrase = document.getElementById("row-frase");
 
       document.getElementById("meta-uploader").textContent = uploader || "";
       document.getElementById("meta-desc").textContent = description || "";
+      document.getElementById("meta-frase").textContent = obterFraseAleatoria();
 
       rowUp.style.display = uploader ? "flex" : "none";
       rowDesc.style.display = description ? "flex" : "none";
+      rowFrase.style.display = "flex";
       block.style.display = (uploader || description) ? "flex" : "none";
     }
 
