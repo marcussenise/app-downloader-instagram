@@ -156,7 +156,7 @@
       color: #f0f0f0;
       word-break: break-word;
       white-space: pre-wrap;
-      max-height: 120px;
+      max-height: 280px;
       overflow-y: auto;
     }
 
@@ -180,6 +180,36 @@
 
     .copy-btn:active { opacity: 0.85; }
     .copy-btn.copied { background: #1a5c35; color: #4cde89; }
+
+    .cta-lista {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .cta-opcao {
+      display: block;
+      text-align: left;
+      width: 100%;
+      padding: 10px 12px;
+      background: #1c1c1c;
+      border: 1.5px solid #333;
+      border-radius: 10px;
+      color: #ddd;
+      font-size: 0.88rem;
+      font-weight: 400;
+      line-height: 1.35;
+      cursor: pointer;
+      white-space: pre-wrap;
+      word-break: break-word;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .cta-opcao.selecionado {
+      border-color: #4cde89;
+      background: #1a2e22;
+      color: #f0f0f0;
+    }
   </style>
 </head>
 <body>
@@ -204,6 +234,14 @@
     <div class="msg ok" id="msg-ok"></div>
     <div class="msg err" id="msg-err"></div>
 
+    <div class="meta-row">
+      <span class="meta-label">Pesquisa — tema do post (opcional se a descrição já disser)</span>
+      <textarea id="tema" placeholder="Ex: tartarugas na praia Ostional, Costa Rica"></textarea>
+      <button type="button" id="btn-legenda" onclick="pesquisarNoClaude()">1. Copiar pedido e abrir o Claude</button>
+      <button type="button" id="btn-resposta" onclick="colarResposta()">2. Colar resposta do Claude</button>
+      <div class="msg err" id="msg-legenda-err"></div>
+    </div>
+
     <div class="meta-block" id="meta-block">
       <div class="meta-row" id="row-uploader">
         <span class="meta-label">Conta</span>
@@ -211,14 +249,13 @@
         <button class="copy-btn" onclick="copiar('meta-uploader', this)">Copiar</button>
       </div>
       <div class="meta-row" id="row-desc">
-        <span class="meta-label">Descrição</span>
+        <span class="meta-label">Legenda final</span>
         <span class="meta-value" id="meta-desc"></span>
         <button class="copy-btn" onclick="copiar('meta-desc', this)">Copiar</button>
       </div>
       <div class="meta-row" id="row-frase">
-        <span class="meta-label">Sugestão CTA</span>
-        <span class="meta-value" id="meta-frase"></span>
-        <button class="copy-btn" onclick="copiar('meta-frase', this)">Copiar</button>
+        <span class="meta-label">CTA — toque para incluir na descrição</span>
+        <div class="cta-lista" id="cta-lista"></div>
       </div>
     </div>
   </div>
@@ -229,6 +266,7 @@
     const frasesCTA = [
       '🧭 Para mais dicas e curiosidades sobre arte, viagem e cultura: @explorai.com.br',
       '🧭 Planeje, descubra, explore! Sua viagem fica completa no @explorai.com.br - Com um app em breve saindo do forno! Fique ligado nas novidades 🛫',
+      '📲 Em breve, um aplicativo para ajudar você viajante, em todo momento da sua próxima viagem! 🛫 Siga  @explorai.com.br  e acompanhe!'
     ];
     const textarea = document.getElementById('url');
     const botaoColar = document.getElementById('btn-colar');
@@ -256,24 +294,104 @@
       });
     }
 
-    function obterFraseAleatoria() {
-      return frasesCTA[Math.floor(Math.random() * frasesCTA.length)];
+    // Estado do post atual, usado para remontar a descrição ao trocar o CTA
+    // legenda: texto gerado pela pesquisa; quando existe, substitui a descrição original
+    const metaAtual = { uploader: "", description: "", legenda: "", cta: -1 };
+
+    function renderizarCTAs() {
+      const lista = document.getElementById("cta-lista");
+      lista.innerHTML = "";
+      frasesCTA.forEach((frase, i) => {
+        const opcao = document.createElement("button");
+        opcao.type = "button";
+        opcao.className = "cta-opcao" + (i === metaAtual.cta ? " selecionado" : "");
+        opcao.textContent = frase;
+        opcao.addEventListener("click", () => {
+          // Tocar no CTA já selecionado remove ele da descrição
+          metaAtual.cta = metaAtual.cta === i ? -1 : i;
+          renderizarCTAs();
+          atualizarDescricao();
+        });
+        lista.appendChild(opcao);
+      });
+    }
+
+    function atualizarDescricao() {
+      const { uploader, description, legenda, cta } = metaAtual;
+      const credito = uploader ? `🎥: ${uploader}` : "";
+      const descCompleta = [legenda || description, frasesCTA[cta], credito].filter(Boolean).join("\n\n");
+      document.getElementById("meta-desc").textContent = descCompleta;
+      document.getElementById("row-desc").style.display = descCompleta ? "flex" : "none";
     }
 
     function mostrarMeta(uploader, description) {
-      const block = document.getElementById("meta-block");
-      const rowUp = document.getElementById("row-uploader");
-      const rowDesc = document.getElementById("row-desc");
-      const rowFrase = document.getElementById("row-frase");
+      metaAtual.uploader = uploader || "";
+      metaAtual.description = description || "";
+      metaAtual.legenda = "";
+      metaAtual.cta = -1;
 
-      document.getElementById("meta-uploader").textContent = uploader || "";
-      document.getElementById("meta-desc").textContent = description || "";
-      document.getElementById("meta-frase").textContent = obterFraseAleatoria();
+      document.getElementById("meta-uploader").textContent = metaAtual.uploader;
+      document.getElementById("row-uploader").style.display = uploader ? "flex" : "none";
+      document.getElementById("row-frase").style.display = "flex";
+      renderizarCTAs();
+      atualizarDescricao();
+      document.getElementById("meta-block").style.display = (uploader || description) ? "flex" : "none";
+    }
 
-      rowUp.style.display = uploader ? "flex" : "none";
-      rowDesc.style.display = description ? "flex" : "none";
-      rowFrase.style.display = "flex";
-      block.style.display = (uploader || description) ? "flex" : "none";
+    // Pedido enviado ao Claude (claude.ai / app), usando a assinatura em vez da API
+    const PEDIDO_LEGENDA = `Escreva uma legenda de Instagram para o perfil @explorai.com.br (arte, viagem e cultura).
+
+Pesquise na web e escreva em português do Brasil (coloque a bandeira do Brasil na primeira linha, traduzindo/escrevendo o texto, e após o texto, traduza o que foi escrito para inglês-EUA, adicionando a bandeira dos EUA e o texto traduzido.):
+- 3 a 5 parágrafos curtos (1 a 3 frases cada), dinâmicos mas informativos.
+- Diga onde fica o lugar (cidade, região, país) e traga história, curiosidades e o que torna aquilo especial; se fizer sentido, a melhor época para visitar.
+- Use só fatos que você confirmou na pesquisa; prefira números e nomes concretos a adjetivos genéricos.
+- Um emoji no início de alguns parágrafos, sem exagero. Coloque no final do texto hashtags relacionadas e visitadas, sem links.
+- Não inclua chamada para seguir o perfil nem crédito do autor do vídeo.
+
+Responda só com a legenda, sem introdução nem comentários.`;
+
+    function mostrarErroLegenda(texto) {
+      const msgErr = document.getElementById("msg-legenda-err");
+      msgErr.textContent = texto;
+      msgErr.style.display = texto ? "block" : "none";
+    }
+
+    function pesquisarNoClaude() {
+      const tema = document.getElementById("tema").value.trim();
+      mostrarErroLegenda("");
+      if (!tema && !metaAtual.description) {
+        mostrarErroLegenda("Escreva um tema ou baixe um post com descrição primeiro.");
+        return;
+      }
+
+      const partes = [PEDIDO_LEGENDA];
+      if (tema) partes.push(`Tema: ${tema}`);
+      if (metaAtual.description) partes.push(`Descrição original do vídeo:\n${metaAtual.description}`);
+
+      // Copia e abre na mesma interação do toque, senão o navegador bloqueia
+      navigator.clipboard.writeText(partes.join("\n\n"))
+        .catch(() => mostrarErroLegenda("Não foi possível copiar o pedido automaticamente."));
+      window.open("https://claude.ai/new", "_blank");
+    }
+
+    async function colarResposta() {
+      mostrarErroLegenda("");
+      let texto;
+      try {
+        texto = (await navigator.clipboard.readText()).trim();
+      } catch (e) {
+        mostrarErroLegenda("Não foi possível ler a área de transferência. Permita o acesso e tente de novo.");
+        return;
+      }
+      if (!texto) {
+        mostrarErroLegenda("Copie a resposta do Claude primeiro.");
+        return;
+      }
+      metaAtual.legenda = texto;
+      document.getElementById("row-frase").style.display = "flex";
+      renderizarCTAs();
+      atualizarDescricao();
+      document.getElementById("meta-block").style.display = "flex";
     }
 
     async function baixar() {
