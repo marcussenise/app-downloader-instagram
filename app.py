@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import re
@@ -31,6 +32,11 @@ if _android_root.exists():
 else:
     SAVE_DIR = _termux_fallback
 log.info("SAVE_DIR = %s  (existe: %s)", SAVE_DIR, SAVE_DIR.exists())
+log.info("yt-dlp versão %s", yt_dlp.version.__version__)
+
+# Opcional: exporte os cookies do Instagram (formato Netscape) para cookies.txt
+# ao lado do app.py — o Instagram costuma exigir login mesmo para posts públicos.
+COOKIES_FILE = Path(__file__).parent / "cookies.txt"
 
 try:
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -84,6 +90,10 @@ def download():
     if not url or "instagram.com" not in url:
         return jsonify(error="Cole um link válido do Instagram."), 400
 
+    # Remove parâmetros de rastreamento (?igsh=, ?stkn=, ...) que podem atrapalhar o extractor
+    url = url.split("?", 1)[0].split("#", 1)[0]
+    log.info("URL normalizada: %s", url)
+
     antes = set(SAVE_DIR.iterdir()) if SAVE_DIR.exists() else set()
 
     ydl_opts = {
@@ -95,6 +105,9 @@ def download():
         "autonumber_start": 1,
         "logger": _YtdlpLogger(),
     }
+    if COOKIES_FILE.exists():
+        ydl_opts["cookiefile"] = str(COOKIES_FILE)
+        log.info("Usando cookies de %s", COOKIES_FILE)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -103,8 +116,14 @@ def download():
     except yt_dlp.utils.DownloadError as e:
         msg = str(e)
         log.error("DownloadError: %s", msg)
-        if "login" in msg.lower() or "private" in msg.lower():
-            return jsonify(error="Post privado ou requer login no Instagram."), 400
+        low = msg.lower()
+        if "login" in low or "private" in low or "rate-limit" in low:
+            dica = (
+                "O Instagram bloqueou o acesso sem login (acontece até com posts públicos). "
+                "Atualize o yt-dlp (pip install -U yt-dlp) e, se persistir, coloque um cookies.txt "
+                "do Instagram ao lado do app.py."
+            )
+            return jsonify(error=f"{dica}<br><small>{html.escape(msg)}</small>"), 400
         return jsonify(error=f"Erro ao baixar: {msg}"), 400
     except Exception as e:
         log.exception("Erro inesperado")

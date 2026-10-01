@@ -11,7 +11,7 @@ echo "==> Liberando acesso ao armazenamento..."
 termux-setup-storage
 
 echo "==> Instalando dependências Python..."
-pip install flask yt-dlp
+pip install -U flask yt-dlp
 
 echo ""
 echo "✓ Pronto! Para iniciar o app, rode:"
