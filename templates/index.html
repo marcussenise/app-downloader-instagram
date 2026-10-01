@@ -181,6 +181,16 @@
     .copy-btn:active { opacity: 0.85; }
     .copy-btn.copied { background: #1a5c35; color: #4cde89; }
 
+    .etapa-pt {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    textarea.editor { height: 260px; resize: vertical; }
+    textarea.editor-curto { height: 56px; }
+
     .cta-lista {
       display: flex;
       flex-direction: column;
@@ -237,8 +247,20 @@
     <div class="meta-row">
       <span class="meta-label">Pesquisa — tema do post (opcional se a descrição já disser)</span>
       <textarea id="tema" placeholder="Ex: tartarugas na praia Ostional, Costa Rica"></textarea>
-      <button type="button" id="btn-legenda" onclick="pesquisarNoClaude()">1. Copiar pedido e abrir o Claude</button>
-      <button type="button" id="btn-resposta" onclick="colarResposta()">2. Colar resposta do Claude</button>
+      <button type="button" onclick="pesquisarNoClaude()">1. Copiar pedido e abrir o Claude</button>
+      <button type="button" onclick="colarPortugues()">2. Colar texto em português</button>
+
+      <div class="etapa-pt" id="etapa-pt">
+        <span class="meta-label">Texto em português — revise e edite à vontade</span>
+        <textarea id="texto-pt" class="editor"></textarea>
+        <span class="meta-label" id="contador-pt"></span>
+        <span class="meta-label">Hashtags (máx. 5)</span>
+        <textarea id="hashtags" class="editor-curto"></textarea>
+        <button type="button" onclick="pedirTraducao()">3. Aprovar e copiar pedido de tradução</button>
+        <button type="button" onclick="colarIngles()">4. Colar tradução em inglês</button>
+      </div>
+
+      <div class="msg ok" id="msg-legenda-ok"></div>
       <div class="msg err" id="msg-legenda-err"></div>
     </div>
 
@@ -251,6 +273,7 @@
       <div class="meta-row" id="row-desc">
         <span class="meta-label">Legenda final</span>
         <span class="meta-value" id="meta-desc"></span>
+        <span class="meta-label" id="meta-contador"></span>
         <button class="copy-btn" onclick="copiar('meta-desc', this)">Copiar</button>
       </div>
       <div class="meta-row" id="row-frase">
@@ -294,9 +317,56 @@
       });
     }
 
-    // Estado do post atual, usado para remontar a descrição ao trocar o CTA
-    // legenda: texto gerado pela pesquisa; quando existe, substitui a descrição original
-    const metaAtual = { uploader: "", description: "", legenda: "", cta: -1 };
+    // Estado do post atual, usado para remontar a legenda final
+    // pt/en: textos gerados pelo Claude; quando existem, substituem a descrição original
+    const metaAtual = { uploader: "", description: "", pt: "", en: "", hashtags: [], cta: -1 };
+
+    const LIMITE_INSTAGRAM = 2200;
+    const MAX_HASHTAGS = 5;
+    const SEPARADOR = "\n\n";
+    // Na mesma linha do gancho, para não gastar uma das 3 linhas visíveis antes do "...mais"
+    const BANDEIRA_PT = "🇧🇷 ";
+    const BANDEIRA_EN = "🇺🇸 ";
+    const RESERVA_HASHTAGS = 120;
+
+    function textoCredito(uploader) {
+      return uploader ? `🎥: ${uploader}` : "";
+    }
+
+    // Caracteres que sobram para PT + EN + hashtags, reservando o maior CTA,
+    // o crédito e as quebras de linha entre as partes
+    function orcamentoTexto() {
+      const maiorCTA = Math.max(...frasesCTA.map(f => f.length));
+      const credito = textoCredito(metaAtual.uploader) || textoCredito("@" + "x".repeat(30));
+      return LIMITE_INSTAGRAM - maiorCTA - credito.length - SEPARADOR.length * 3;
+    }
+
+    // Bandeiras e a quebra de linha entre PT e EN
+    const EXTRAS_IDIOMAS = BANDEIRA_PT.length + BANDEIRA_EN.length + SEPARADOR.length;
+
+    // Metade do espaço para cada idioma, já descontando a reserva das hashtags
+    function limitePortugues() {
+      return Math.floor((orcamentoTexto() - EXTRAS_IDIOMAS - RESERVA_HASHTAGS) / 2);
+    }
+
+    // A tradução fica com tudo que sobrou depois do português e das hashtags reais
+    function limiteIngles() {
+      return orcamentoTexto() - EXTRAS_IDIOMAS - metaAtual.pt.length - metaAtual.hashtags.join(" ").length;
+    }
+
+    function extrairHashtags(texto) {
+      return (texto.match(/#[\p{L}\p{N}_]+/gu) || []).slice(0, MAX_HASHTAGS);
+    }
+
+    // Separa as linhas finais só com hashtags do resto do texto
+    function separarHashtags(texto) {
+      const linhas = texto.trim().split("\n");
+      const tags = [];
+      while (linhas.length && /^\s*(#[\p{L}\p{N}_]+\s*)+$/u.test(linhas[linhas.length - 1])) {
+        tags.unshift(...linhas.pop().match(/#[\p{L}\p{N}_]+/gu));
+      }
+      return { corpo: linhas.join("\n").trim(), hashtags: tags.slice(0, MAX_HASHTAGS) };
+    }
 
     function renderizarCTAs() {
       const lista = document.getElementById("cta-lista");
@@ -316,19 +386,39 @@
       });
     }
 
+    // .length conta emojis como 2, então os contadores erram para o lado seguro
+    function mostrarContador(id, usado, limite, dica) {
+      const el = document.getElementById(id);
+      const passou = usado > limite;
+      el.textContent = `${usado} / ${limite} caracteres` + (passou ? ` — ${dica}` : "");
+      el.style.color = passou ? "#de4c4c" : "";
+    }
+
     function atualizarDescricao() {
-      const { uploader, description, legenda, cta } = metaAtual;
-      const credito = uploader ? `🎥: ${uploader}` : "";
-      const descCompleta = [legenda || description, frasesCTA[cta], credito].filter(Boolean).join("\n\n");
+      const { uploader, description, pt, en, hashtags, cta } = metaAtual;
+      const textos = [pt && BANDEIRA_PT + pt, en && BANDEIRA_EN + en].filter(Boolean).join(SEPARADOR);
+      const partes = [textos || description, frasesCTA[cta], textoCredito(uploader), hashtags.join(" ")];
+      const descCompleta = partes.filter(Boolean).join(SEPARADOR);
       document.getElementById("meta-desc").textContent = descCompleta;
       document.getElementById("row-desc").style.display = descCompleta ? "flex" : "none";
+
+      mostrarContador("meta-contador", descCompleta.length, LIMITE_INSTAGRAM, "passou do limite, encurte o texto");
+      if (pt) {
+        mostrarContador("contador-pt", pt.length, limitePortugues(), "encurte para a tradução caber");
+      }
     }
 
     function mostrarMeta(uploader, description) {
       metaAtual.uploader = uploader || "";
       metaAtual.description = description || "";
-      metaAtual.legenda = "";
+      metaAtual.pt = "";
+      metaAtual.en = "";
+      metaAtual.hashtags = [];
       metaAtual.cta = -1;
+      document.getElementById("texto-pt").value = "";
+      document.getElementById("hashtags").value = "";
+      document.getElementById("etapa-pt").style.display = "none";
+      mostrarAvisoLegenda("", "");
 
       document.getElementById("meta-uploader").textContent = metaAtual.uploader;
       document.getElementById("row-uploader").style.display = uploader ? "flex" : "none";
@@ -338,61 +428,145 @@
       document.getElementById("meta-block").style.display = (uploader || description) ? "flex" : "none";
     }
 
-    // Pedido enviado ao Claude (claude.ai / app), usando a assinatura em vez da API
-    const PEDIDO_LEGENDA = `Escreva uma legenda de Instagram para o perfil @explorai.com.br (arte, viagem e cultura).
+    // Pedidos enviados ao Claude (claude.ai / app), usando a assinatura em vez da API.
+    // Os alvos ficam ~10% abaixo do limite real porque o Claude não conta caracteres com precisão.
+    function pedidoPortugues() {
+      const alvo = Math.floor(limitePortugues() * 0.9);
+      return `Escreva uma legenda de Instagram para o perfil @explorai.com.br (arte, viagem e cultura).
 
-Pesquise na web e escreva em português do Brasil (coloque a bandeira do Brasil na primeira linha, traduzindo/escrevendo o texto, e após o texto, traduza o que foi escrito para inglês-EUA, adicionando a bandeira dos EUA e o texto traduzido.):
-- 3 a 5 parágrafos curtos (1 a 3 frases cada), dinâmicos mas informativos.
+Pesquise na web e escreva em português do Brasil.
+
+ABERTURA (o mais importante): o Instagram só mostra ~125 caracteres antes do "...mais". Se as 3 primeiras linhas não prenderem, ninguém lê o resto. Comece com 3 linhas curtas, separadas por uma única quebra de linha, somando no máximo 110 caracteres:
+- Linha 1: afirmação forte ou número específico e surpreendente sobre o lugar (um fato real da pesquisa).
+- Linha 2: tensão ou promessa — o que a pessoa vai descobrir.
+- Linha 3: convite implícito para continuar lendo, terminando com 👇.
+Nada de saudação nem introdução genérica ("Oi gente", "Hoje vou falar sobre", "Você sabia...?"). Não comece a primeira linha com emoji.
+Exemplo do formato (outro tema): "Uma praia recebe 500 mil tartarugas em 3 noites.\nE ninguém sabe exatamente por quê.\nOlha o que acontece por lá 👇"
+
+DEPOIS DA ABERTURA, uma linha em branco e:
+- 3 a 5 parágrafos curtos (1 a 3 frases cada), dinâmicos mas informativos, que cumpram a promessa da abertura.
 - Diga onde fica o lugar (cidade, região, país) e traga história, curiosidades e o que torna aquilo especial; se fizer sentido, a melhor época para visitar.
 - Use só fatos que você confirmou na pesquisa; prefira números e nomes concretos a adjetivos genéricos.
-- Um emoji no início de alguns parágrafos, sem exagero. Coloque no final do texto hashtags relacionadas e visitadas, sem links.
+- Um emoji no início de alguns parágrafos, sem exagero. Sem links e sem bandeiras.
+- Na última linha, no máximo ${MAX_HASHTAGS} hashtags relacionadas e muito usadas, separadas por espaço.
 - Não inclua chamada para seguir o perfil nem crédito do autor do vídeo.
+- Escreva só em português; a tradução para o inglês será pedida depois.
+
+LIMITE DE TAMANHO: o texto (sem contar as hashtags) deve ter no máximo ${alvo} caracteres, contando espaços, quebras de linha e emojis. Se precisar, use menos parágrafos. Conte antes de responder.
 
 Responda só com a legenda, sem introdução nem comentários.`;
+    }
 
-    function mostrarErroLegenda(texto) {
+    function pedidoIngles() {
+      const alvo = Math.floor(limiteIngles() * 0.9);
+      return `Traduza para o inglês dos EUA a legenda de Instagram abaixo.
+- Mantenha os parágrafos, os emojis e o tom.
+- As 3 primeiras linhas são o gancho que aparece antes do "...mais": mantenha-as curtas, fortes e em 3 linhas separadas, somando no máximo 110 caracteres.
+- Não adicione nem remova informações, hashtags ou bandeiras.
+- No máximo ${alvo} caracteres, contando espaços, quebras de linha e emojis.
+
+Responda só com a tradução, sem introdução nem comentários.
+
+${metaAtual.pt}`;
+    }
+
+    function mostrarAvisoLegenda(ok, erro) {
+      const msgOk = document.getElementById("msg-legenda-ok");
       const msgErr = document.getElementById("msg-legenda-err");
-      msgErr.textContent = texto;
-      msgErr.style.display = texto ? "block" : "none";
+      msgOk.textContent = ok;
+      msgOk.style.display = ok ? "block" : "none";
+      msgErr.textContent = erro;
+      msgErr.style.display = erro ? "block" : "none";
     }
 
-    function pesquisarNoClaude() {
-      const tema = document.getElementById("tema").value.trim();
-      mostrarErroLegenda("");
-      if (!tema && !metaAtual.description) {
-        mostrarErroLegenda("Escreva um tema ou baixe um post com descrição primeiro.");
-        return;
-      }
-
-      const partes = [PEDIDO_LEGENDA];
-      if (tema) partes.push(`Tema: ${tema}`);
-      if (metaAtual.description) partes.push(`Descrição original do vídeo:\n${metaAtual.description}`);
-
-      // Copia e abre na mesma interação do toque, senão o navegador bloqueia
-      navigator.clipboard.writeText(partes.join("\n\n"))
-        .catch(() => mostrarErroLegenda("Não foi possível copiar o pedido automaticamente."));
-      window.open("https://claude.ai/new", "_blank");
-    }
-
-    async function colarResposta() {
-      mostrarErroLegenda("");
-      let texto;
+    async function lerAreaDeTransferencia() {
       try {
-        texto = (await navigator.clipboard.readText()).trim();
+        const texto = (await navigator.clipboard.readText()).trim();
+        if (!texto) mostrarAvisoLegenda("", "Copie a resposta do Claude primeiro.");
+        return texto;
       } catch (e) {
-        mostrarErroLegenda("Não foi possível ler a área de transferência. Permita o acesso e tente de novo.");
-        return;
+        mostrarAvisoLegenda("", "Não foi possível ler a área de transferência. Permita o acesso e tente de novo.");
+        return "";
       }
-      if (!texto) {
-        mostrarErroLegenda("Copie a resposta do Claude primeiro.");
-        return;
-      }
-      metaAtual.legenda = texto;
+    }
+
+    function mostrarResultado() {
       document.getElementById("row-frase").style.display = "flex";
       renderizarCTAs();
       atualizarDescricao();
       document.getElementById("meta-block").style.display = "flex";
     }
+
+    function pesquisarNoClaude() {
+      const tema = document.getElementById("tema").value.trim();
+      mostrarAvisoLegenda("", "");
+      if (!tema && !metaAtual.description) {
+        mostrarAvisoLegenda("", "Escreva um tema ou baixe um post com descrição primeiro.");
+        return;
+      }
+
+      const partes = [pedidoPortugues()];
+      if (tema) partes.push(`Tema: ${tema}`);
+      if (metaAtual.description) partes.push(`Descrição original do vídeo:\n${metaAtual.description}`);
+
+      // Copia e abre na mesma interação do toque, senão o navegador bloqueia
+      navigator.clipboard.writeText(partes.join("\n\n"))
+        .catch(() => mostrarAvisoLegenda("", "Não foi possível copiar o pedido automaticamente."));
+      window.open("https://claude.ai/new", "_blank");
+    }
+
+    async function colarPortugues() {
+      mostrarAvisoLegenda("", "");
+      const texto = await lerAreaDeTransferencia();
+      if (!texto) return;
+
+      const { corpo, hashtags } = separarHashtags(texto);
+      metaAtual.pt = corpo;
+      metaAtual.en = "";
+      metaAtual.hashtags = hashtags;
+      document.getElementById("texto-pt").value = corpo;
+      document.getElementById("hashtags").value = hashtags.join(" ");
+      document.getElementById("etapa-pt").style.display = "flex";
+      mostrarResultado();
+    }
+
+    function pedirTraducao() {
+      if (!metaAtual.pt) {
+        mostrarAvisoLegenda("", "Cole ou escreva o texto em português primeiro.");
+        return;
+      }
+      navigator.clipboard.writeText(pedidoIngles())
+        .then(() => mostrarAvisoLegenda("Pedido de tradução copiado. Cole na mesma conversa do Claude e depois toque em 4.", ""))
+        .catch(() => mostrarAvisoLegenda("", "Não foi possível copiar o pedido automaticamente."));
+    }
+
+    async function colarIngles() {
+      if (!metaAtual.pt) {
+        mostrarAvisoLegenda("", "Cole ou escreva o texto em português primeiro.");
+        return;
+      }
+      mostrarAvisoLegenda("", "");
+      const texto = await lerAreaDeTransferencia();
+      if (!texto) return;
+      // Se o Claude devolver hashtags junto, ficam só as que já estão no campo
+      metaAtual.en = separarHashtags(texto).corpo;
+      mostrarResultado();
+    }
+
+    // Edição do português invalida a tradução: ela precisa ser pedida de novo
+    document.getElementById("texto-pt").addEventListener("input", e => {
+      metaAtual.pt = e.target.value.trim();
+      if (metaAtual.en) {
+        metaAtual.en = "";
+        mostrarAvisoLegenda("", "Texto em português mudou — peça a tradução de novo (passo 3).");
+      }
+      atualizarDescricao();
+    });
+
+    document.getElementById("hashtags").addEventListener("input", e => {
+      metaAtual.hashtags = extrairHashtags(e.target.value);
+      atualizarDescricao();
+    });
 
     async function baixar() {
       const url = document.getElementById("url").value.trim();
